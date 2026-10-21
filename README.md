@@ -10,23 +10,50 @@ its base and comments with each view that changed, as Mermaid that GitHub render
 
 A change to a description, a technology or a view's include rules counts; a renamed or moved
 element shows as removed and added. Views that did not change are left out, and a pull request
-that changes no view gets no comment, or its earlier comment says so. The colours read in GitHub's light and dark themes.
+that changes no view gets no comment, or its earlier comment says so. The colours read in
+GitHub's light and dark themes.
+
+For a pull request that retitles the web app *Storefront*, calls the API over HTTPS, adds a search
+and drops the database, the comment shows:
+
+**After**
 
 ```mermaid
 ---
-title: "API"
+title: "Shop"
 ---
 graph TB
-  subgraph ShopApi["`API`"]
-    ShopApi.Orders@{ shape: rectangle, label: "Orders" }
-    ShopApi.Billing@{ shape: rectangle, label: "Billing" }
-    ShopApi.Mail@{ shape: rectangle, label: "Notifications" }
+  subgraph Shop["`Shop`"]
+    Shop.Web@{ shape: rectangle, label: "Storefront" }
+    Shop.Api@{ shape: rectangle, label: "API" }
+    Shop.Search@{ shape: rectangle, label: "Search" }
   end
-  ShopApi.Orders -. "`charges`" .-> ShopApi.Billing
-  ShopApi.Orders -. "`sends receipt`" .-> ShopApi.Mail
-  style ShopApi fill:#8c959f1f,stroke:#8c959f
-  style ShopApi.Mail fill:#2da44e33,stroke:#2da44e,stroke-width:3px
+  Shop.Web -. "`calls over HTTPS`" .-> Shop.Api
+  Shop.Web -. "`searches products`" .-> Shop.Search
+  style Shop fill:#8c959f1f,stroke:#8c959f
+  style Shop.Web fill:#bf870033,stroke:#bf8700,stroke-width:3px
+  style Shop.Search fill:#2da44e33,stroke:#2da44e,stroke-width:3px
+  linkStyle 0 stroke:#bf8700,stroke-width:3px
   linkStyle 1 stroke:#2da44e,stroke-width:3px
+```
+
+**Before**
+
+```mermaid
+---
+title: "Shop"
+---
+graph TB
+  subgraph Shop["`Shop`"]
+    Shop.Web@{ shape: rectangle, label: "Web app" }
+    Shop.Api@{ shape: rectangle, label: "API" }
+    Shop.Db@{ shape: disk, label: "Database" }
+  end
+  Shop.Web -. "`calls`" .-> Shop.Api
+  Shop.Api -. "`reads and writes`" .-> Shop.Db
+  style Shop fill:#8c959f1f,stroke:#8c959f
+  style Shop.Db fill:#e5534b33,stroke:#e5534b,stroke-width:3px
+  linkStyle 1 stroke:#e5534b,stroke-width:3px
 ```
 
 ## Usage
