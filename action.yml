@@ -1,6 +1,9 @@
 name: LikeC4 architecture diff
 description: Comment on a pull request with each view of the LikeC4 model it changed, the changes colour-coded in Mermaid.
 author: novibe-org
+branding:
+  icon: git-pull-request
+  color: green
 
 inputs:
   path:
