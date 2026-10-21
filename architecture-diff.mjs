@@ -4,8 +4,9 @@ import { existsSync, readdirSync, readFileSync } from 'node:fs'
 
 const MARKER = '<!-- architecture-diff -->'
 const LIMIT = 60000
-const STROKE = { added: '#1a7f37', changed: '#bf8700', removed: '#cf222e' }
-const FILL = { added: '#dafbe1', changed: '#fff8c5', removed: '#ffebe9' }
+// Mid-tones and translucent tints, as Mermaid on GitHub cannot pick colours by theme: each reads on light and dark.
+const STROKE = { added: '#2da44e', changed: '#bf8700', removed: '#e5534b' }
+const FILL = { added: '#2da44e33', changed: '#bf870033', removed: '#e5534b33' }
 const EMPTY = { elements: {}, relations: {}, deployments: { elements: {} }, views: {} }
 
 const [baseDir, headDir] = process.argv.slice(2)
@@ -98,17 +99,21 @@ function styled(view, text, { nodes, edges }, unmatched) {
   const unlabelled = text.replace(/"`[\s\S]*?`"/g, '""')
   const links = unlabelled.split('\n').filter(l => /^\s*\S+\s+-.*->\s+\S+\s*$/.test(l)).map(l => l.trim().split(/\s+/))
   const taken = new Set()
+  const containers = new Set(view.nodes.filter(n => n.children?.length).map(n => n.id))
   const lines = [text]
+  // Mermaid fills a subgraph and borders it olive in its light theme, which reads as the changed tint.
+  for (const id of containers) if (!nodes.has(id) && text.includes(ids.get(id))) lines.push(`  style ${ids.get(id)} fill:#8c959f1f,stroke:#8c959f`)
   for (const [id, state] of nodes) {
+    const fill = containers.has(id) ? 'fill:#8c959f1f,' : `fill:${FILL[state]},`
     if (!text.includes(ids.get(id))) unmatched.push(`${view.id}: ${id}`)
-    else lines.push(`  style ${ids.get(id)} fill:${FILL[state]},stroke:${STROKE[state]},stroke-width:3px`)
+    else lines.push(`  style ${ids.get(id)} ${fill}stroke:${STROKE[state]},stroke-width:3px`)
   }
   for (const e of view.edges) {
     const at = links.findIndex((l, i) => !taken.has(i) && l[0] === ids.get(e.source) && l.at(-1) === ids.get(e.target))
     if (at >= 0) taken.add(at)
     if (!edges.has(e.id)) continue
     if (at < 0) unmatched.push(`${view.id}: ${e.source} -> ${e.target}`)
-    else lines.push(`  linkStyle ${at} stroke:${STROKE[edges.get(e.id)]},stroke-width:3px,color:${STROKE[edges.get(e.id)]}`)
+    else lines.push(`  linkStyle ${at} stroke:${STROKE[edges.get(e.id)]},stroke-width:3px`)
   }
   return lines.join('\n').replaceAll('```', "'''")
 }
