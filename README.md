@@ -47,7 +47,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
-      - uses: novibe-org/architecture-diff-action@v1
+      - uses: novibe-org/likec4-architecture-diff-action@v1
 ```
 
 The `paths` filter runs it only on pull requests that touch the model. It updates its own comment
