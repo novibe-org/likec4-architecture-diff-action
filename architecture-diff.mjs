@@ -7,6 +7,7 @@ const LIMIT = 60000
 // Mid-tones and translucent tints, as Mermaid on GitHub cannot pick colours by theme: each reads on light and dark.
 const STROKE = { added: '#2da44e', changed: '#bf8700', removed: '#e5534b' }
 const FILL = { added: '#2da44e33', changed: '#bf870033', removed: '#e5534b33' }
+const AREA = '#8c959f1f'
 const EMPTY = { elements: {}, relations: {}, deployments: { elements: {} }, views: {} }
 
 const [baseDir, headDir] = process.argv.slice(2)
@@ -93,20 +94,20 @@ function mermaidIds(view) {
   return ids
 }
 
-function styled(view, text, { nodes, edges }, unmatched) {
+function styled(view, text, { nodes, edges }, unmatched, extra = new Set()) {
   const ids = mermaidIds(view)
   // A long label wraps over lines, so labels are dropped before links are read line by line.
   const unlabelled = text.replace(/"`[\s\S]*?`"/g, '""')
   const links = unlabelled.split('\n').filter(l => /^\s*\S+\s+-.*->\s+\S+\s*$/.test(l)).map(l => l.trim().split(/\s+/))
   const taken = new Set()
-  const containers = new Set(view.nodes.filter(n => n.children?.length).map(n => n.id))
+  const containers = new Set([...view.nodes.filter(n => n.children?.length).map(n => n.id), ...extra])
   const lines = [text]
   // Mermaid fills a subgraph and borders it olive in its light theme, which reads as the changed tint.
-  for (const id of containers) if (!nodes.has(id) && text.includes(ids.get(id))) lines.push(`  style ${ids.get(id)} fill:#8c959f1f,stroke:#8c959f`)
+  for (const id of containers) if (!nodes.has(id) && text.includes(ids.get(id))) lines.push(`  style ${ids.get(id)} fill:${AREA},stroke:#8c959f`)
   for (const [id, state] of nodes) {
-    const fill = containers.has(id) ? 'fill:#8c959f1f,' : `fill:${FILL[state]},`
+    const fill = containers.has(id) ? `fill:${AREA},` : `fill:${FILL[state]},`
     if (!text.includes(ids.get(id))) unmatched.push(`${view.id}: ${id}`)
-    else lines.push(`  style ${ids.get(id)} ${fill}stroke:${STROKE[state]},stroke-width:3px`)
+    else lines.push(`  style ${ids.get(id)} ${fill}${state === 'removed' ? REMOVED : `stroke:${STROKE[state]},stroke-width:3px`}`)
   }
   for (const e of view.edges) {
     const at = links.findIndex((l, i) => !taken.has(i) && l[0] === ids.get(e.source) && l.at(-1) === ids.get(e.target))
@@ -115,7 +116,120 @@ function styled(view, text, { nodes, edges }, unmatched) {
     if (at < 0) unmatched.push(`${view.id}: ${e.source} -> ${e.target}`)
     else lines.push(`  linkStyle ${at} stroke:${STROKE[edges.get(e.id)]},stroke-width:3px`)
   }
-  return lines.join('\n').replaceAll('```', "'''")
+  return lines
+}
+
+const REMOVED = `stroke:${STROKE.removed},stroke-width:3px,stroke-dasharray:6 4`
+const fence = lines => lines.join('\n').replaceAll('```', "'''")
+
+// A Mermaid statement can span lines, as a long label wraps; it ends where its labels close.
+function statements(text) {
+  const out = []
+  let open = ''
+  for (const line of text.split('\n')) {
+    open = open ? `${open}\n${line}` : line
+    if ((open.match(/`/g) ?? []).length % 2 === 0) out.push(open), (open = '')
+  }
+  return out
+}
+const linkEnds = s => {
+  const bare = s.replace(/"`[\s\S]*?`"/g, '""').trim()
+  return /^\S+\s+-.*->\s+\S+$/.test(bare) ? [bare.split(/\s+/)[0], bare.split(/\s+/).at(-1)] : null
+}
+
+// The pull request's diagram of a view, with what it removed from the base's diagram put back in.
+function combined(h, b, headText, baseText, added, removed, unmatched) {
+  const headIds = mermaidIds(h)
+  const baseIds = mermaidIds(b)
+  const headByRef = new Map(h.nodes.map(n => [nodeRef(n), n]))
+  const headById = new Map(h.nodes.map(n => [n.id, n]))
+  const baseById = new Map(b.nodes.map(n => [n.id, n]))
+  const lines = headText.split('\n')
+  const baseStatements = statements(baseText)
+  const restored = new Map()
+  const idIn = n => (headByRef.has(nodeRef(n)) ? headIds.get(headByRef.get(nodeRef(n)).id) : restored.get(n.id))
+  const containers = new Set()
+  const styles = []
+
+  // A removed child goes back into its parent; a parent the pull request shows as a leaf becomes a container again.
+  const insert = (parent, placed) => {
+    const parentId = parent && idIn(parent)
+    let at = parentId ? lines.findIndex(l => l.trimStart().startsWith(`subgraph ${parentId}[`)) : -1
+    if (parentId && at < 0) {
+      at = lines.findIndex(l => l.trimStart().startsWith(`${parentId}@{`))
+      if (at >= 0) {
+        const indent = lines[at].match(/^\s*/)[0]
+        const label = lines[at].match(/label: "(.*)" \}\s*$/)?.[1] ?? parentId
+        lines.splice(at, 1, `${indent}subgraph ${parentId}["\`${label}\`"]`, `${indent}end`)
+        if (headByRef.has(nodeRef(parent))) containers.add(headByRef.get(nodeRef(parent)).id)
+      }
+    }
+    if (at < 0) return lines.push(...placed.map(l => `  ${l}`))
+    const outer = lines[at].match(/^\s*/)[0]
+    lines.splice(lines.indexOf(`${outer}end`, at), 0, ...placed.map(l => `${outer}  ${l}`))
+  }
+
+  const depth = n => (n.parent && baseById.has(n.parent) ? depth(baseById.get(n.parent)) + 1 : 0)
+  const gone = b.nodes.filter(n => removed.nodes.get(n.id) === 'removed').sort((x, y) => depth(x) - depth(y))
+  const used = new Set(headIds.values())
+  for (const n of gone) {
+    let id = baseIds.get(n.id)
+    while (used.has(id)) id += 'Removed'
+    used.add(id)
+    restored.set(n.id, id)
+  }
+  for (const n of gone) {
+    const own = baseIds.get(n.id)
+    const at = baseStatements.findIndex(s => new RegExp(`^\\s*(subgraph )?${own.replaceAll('.', '\\.')}[@\\[]`).test(s))
+    if (at < 0) {
+      unmatched.push(`${b.id}: ${n.id}`)
+      continue
+    }
+    const declared = baseStatements[at].trim().replace(own, restored.get(n.id))
+    const container = declared.startsWith('subgraph')
+    insert(n.parent && baseById.get(n.parent), container ? [declared, 'end'] : [declared])
+    styles.push(`  style ${restored.get(n.id)} fill:${container ? AREA : FILL.removed},${REMOVED}`)
+  }
+
+  const baseLinks = baseStatements.filter(linkEnds)
+  const taken = new Set()
+  const lineOf = new Map()
+  for (const e of b.edges) {
+    const at = baseLinks.findIndex((s, i) => !taken.has(i) && linkEnds(s)[0] === baseIds.get(e.source) && linkEnds(s)[1] === baseIds.get(e.target))
+    if (at >= 0) taken.add(at), lineOf.set(e.id, baseLinks[at])
+  }
+  // Relationships rolled up into one arrow: one replaced by another between the same two boxes is one arrow,
+  // paired first with an arrow that looks the same.
+  const goneEdges = b.edges.filter(e => removed.edges.get(e.id) === 'removed')
+  const sameEnds = (t, e) => nodeRef(headById.get(t.source)) === nodeRef(baseById.get(e.source))
+    && nodeRef(headById.get(t.target)) === nodeRef(baseById.get(e.target))
+  const twins = new Set()
+  const merged = new Set()
+  for (const alike of [true, false]) {
+    for (const e of goneEdges) {
+      if (merged.has(e.id)) continue
+      const twin = h.edges.find(t => added.edges.get(t.id) === 'added' && !twins.has(t.id) && sameEnds(t, e) && (!alike || edgeLook(t) === edgeLook(e)))
+      if (!twin) continue
+      twins.add(twin.id)
+      merged.add(e.id)
+      if (alike) added.edges.delete(twin.id)
+      else added.edges.set(twin.id, 'changed')
+    }
+  }
+  let links = statements(lines.join('\n')).filter(linkEnds).length
+  for (const e of goneEdges) {
+    if (merged.has(e.id)) continue
+    const s = lineOf.get(e.id)?.trim()
+    const ends = [idIn(baseById.get(e.source)), idIn(baseById.get(e.target))]
+    if (!s || ends.includes(undefined)) {
+      unmatched.push(`${b.id}: ${e.source} -> ${e.target}`)
+      continue
+    }
+    const [from, to] = linkEnds(s)
+    lines.push(`  ${ends[0]}${s.slice(from.length, s.length - to.length)}${ends[1]}`)
+    styles.push(`  linkStyle ${links++} stroke:${STROKE.removed},stroke-width:3px`)
+  }
+  return { text: lines.join('\n'), styles, containers }
 }
 
 const out = [MARKER, '## Architecture diff', '']
@@ -134,12 +248,18 @@ for (const id of [...new Set([...Object.keys(base.views), ...Object.keys(head.vi
   const h = head.views[id]
   const b = base.views[id]
   const parts = []
-  for (const [label, view, other, dir, side] of [['After', h, b, headDir, 'after'], ['Before', b, h, baseDir, 'before']]) {
-    const file = diagramOf[dir][id]
-    if (!view || !file) continue
-    const m = marks(view, other, side)
-    if (!m.nodes.size && !m.edges.size) continue
-    parts.push(`**${label}**`, '', '```mermaid', styled(view, readFileSync(file, 'utf8').trimEnd(), m, unmatched), '```', '')
+  const headFile = h && diagramOf[headDir][id]
+  const baseFile = b && diagramOf[baseDir][id]
+  const added = h && headFile && marks(h, b, 'after')
+  const removed = b && baseFile && marks(b, h, 'before')
+  const any = m => m && (m.nodes.size || m.edges.size)
+  if (h && headFile && b && baseFile && any(removed)) {
+    const { text, styles, containers } = combined(h, b, readFileSync(headFile, 'utf8').trimEnd(), readFileSync(baseFile, 'utf8').trimEnd(), added, removed, unmatched)
+    if (styles.length || any(added)) parts.push('```mermaid', fence([...styled(h, text, added, unmatched, containers), ...styles]), '```', '')
+  } else if (any(added)) {
+    parts.push('```mermaid', fence(styled(h, readFileSync(headFile, 'utf8').trimEnd(), added, unmatched)), '```', '')
+  } else if (!h && any(removed)) {
+    parts.push('```mermaid', fence(styled(b, readFileSync(baseFile, 'utf8').trimEnd(), removed, unmatched)), '```', '')
   }
   const retitled = h && b && JSON.stringify([h.title, h.description]) !== JSON.stringify([b.title, b.description])
   if (retitled && !parts.length) parts.push('The view\'s title or description changed.', '')
