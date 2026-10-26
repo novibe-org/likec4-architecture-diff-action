@@ -5,14 +5,16 @@ A GitHub Action that shows the reviewer of a pull request what it changed in the
 its base and comments with each view that changed, as one Mermaid diagram that GitHub renders in
 place:
 
-- added elements and relationships in green
-- changed ones in amber
-- removed ones in red, put back where they were, with a dashed border
+- added elements and relationships in blue
+- changed ones in amber, with a thicker border
+- removed ones in reddish purple, put back where they were, with a dashed border
 
 A change to a description, a technology or a view's include rules counts; a renamed or moved
 element shows as removed and added. Views that did not change are left out, and a pull request
-that changes no view gets no comment, or its earlier comment says so. The colours read in
-GitHub's light and dark themes.
+that changes no view gets no comment, or its earlier comment says so. The colours come from the
+[Okabe-Ito palette](https://jfly.uni-koeln.de/color/), which colour-blind readers tell apart, and
+each keeps a 3:1 contrast in GitHub's light and dark themes. The line styles carry the change
+too, so the diff reads in greyscale.
 
 For a pull request that retitles the web app *Storefront*, calls the API over HTTPS, adds a search
 and drops the database, the comment shows:
@@ -32,12 +34,12 @@ graph TB
   Shop.Web -. "`searches products`" .-> Shop.Search
   Shop.Api -. "`reads and writes`" .-> Shop.Db
   style Shop fill:#8c959f1f,stroke:#8c959f
-  style Shop.Web fill:#bf870033,stroke:#bf8700,stroke-width:3px
-  style Shop.Search fill:#2da44e33,stroke:#2da44e,stroke-width:3px
-  linkStyle 0 stroke:#bf8700,stroke-width:3px
-  linkStyle 1 stroke:#2da44e,stroke-width:3px
-  style Shop.Db fill:#e5534b33,stroke:#e5534b,stroke-width:3px,stroke-dasharray:6 4
-  linkStyle 2 stroke:#e5534b,stroke-width:3px
+  style Shop.Web fill:#B07D0033,stroke:#B07D00,stroke-width:4px
+  style Shop.Search fill:#0072B233,stroke:#0072B2,stroke-width:3px
+  linkStyle 0 stroke:#B07D00,stroke-width:4px
+  linkStyle 1 stroke:#0072B2,stroke-width:3px
+  style Shop.Db fill:#CC79A733,stroke:#CC79A7,stroke-width:3px,stroke-dasharray:6 4
+  linkStyle 2 stroke:#CC79A7,stroke-width:3px,stroke-dasharray:6 4
 ```
 
 ## Usage
@@ -72,6 +74,9 @@ there the diff goes to the job summary only.
 | `path` | `docs/architecture` | Directory with the LikeC4 model |
 | `likec4-version` | `1.60.0` | Version of the [`likec4`](https://www.npmjs.com/package/likec4) package to run |
 | `github-token` | `${{ github.token }}` | Token that comments on the pull request |
+| `added-color` | `#0072B2` | Hex stroke colour of what the pull request added; the fill is it at 20 % alpha |
+| `changed-color` | `#B07D00` | Hex stroke colour of what it changed |
+| `removed-color` | `#CC79A7` | Hex stroke colour of what it removed |
 
 ## How it works
 

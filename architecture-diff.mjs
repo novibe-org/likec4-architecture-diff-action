@@ -4,9 +4,15 @@ import { existsSync, readdirSync, readFileSync } from 'node:fs'
 
 const MARKER = '<!-- architecture-diff -->'
 const LIMIT = 60000
-// Mid-tones and translucent tints, as Mermaid on GitHub cannot pick colours by theme: each reads on light and dark.
-const STROKE = { added: '#2da44e', changed: '#bf8700', removed: '#e5534b' }
-const FILL = { added: '#2da44e33', changed: '#bf870033', removed: '#e5534b33' }
+const DEFAULT = { added: '#0072B2', changed: '#B07D00', removed: '#CC79A7' }
+const STROKE = Object.fromEntries(Object.entries(DEFAULT).map(([state, colour]) => {
+  const given = process.env[`${state.toUpperCase()}_COLOR`] || colour
+  if (!/^#[0-9a-f]{6}$/i.test(given)) throw new Error(`${state}-color is ${given}; give a hex colour such as ${colour}`)
+  return [state, given]
+}))
+const FILL = Object.fromEntries(Object.entries(STROKE).map(([state, colour]) => [state, `${colour}33`]))
+const LINE = { added: 'stroke-width:3px', changed: 'stroke-width:4px', removed: 'stroke-width:3px,stroke-dasharray:6 4' }
+const look = state => `stroke:${STROKE[state]},${LINE[state]}`
 const AREA = '#8c959f1f'
 const EMPTY = { elements: {}, relations: {}, deployments: { elements: {} }, views: {} }
 
@@ -107,19 +113,19 @@ function styled(view, text, { nodes, edges }, unmatched, extra = new Set()) {
   for (const [id, state] of nodes) {
     const fill = containers.has(id) ? `fill:${AREA},` : `fill:${FILL[state]},`
     if (!text.includes(ids.get(id))) unmatched.push(`${view.id}: ${id}`)
-    else lines.push(`  style ${ids.get(id)} ${fill}${state === 'removed' ? REMOVED : `stroke:${STROKE[state]},stroke-width:3px`}`)
+    else lines.push(`  style ${ids.get(id)} ${fill}${look(state)}`)
   }
   for (const e of view.edges) {
     const at = links.findIndex((l, i) => !taken.has(i) && l[0] === ids.get(e.source) && l.at(-1) === ids.get(e.target))
     if (at >= 0) taken.add(at)
     if (!edges.has(e.id)) continue
     if (at < 0) unmatched.push(`${view.id}: ${e.source} -> ${e.target}`)
-    else lines.push(`  linkStyle ${at} stroke:${STROKE[edges.get(e.id)]},stroke-width:3px`)
+    else lines.push(`  linkStyle ${at} ${look(edges.get(e.id))}`)
   }
   return lines
 }
 
-const REMOVED = `stroke:${STROKE.removed},stroke-width:3px,stroke-dasharray:6 4`
+const swatch = (state, emoji) => (STROKE[state] === DEFAULT[state] ? `${emoji} ` : '')
 const fence = lines => lines.join('\n').replaceAll('```', "'''")
 
 // A Mermaid statement can span lines, as a long label wraps; it ends where its labels close.
@@ -188,7 +194,7 @@ function combined(h, b, headText, baseText, added, removed, unmatched) {
     const declared = baseStatements[at].trim().replace(own, restored.get(n.id))
     const container = declared.startsWith('subgraph')
     insert(n.parent && baseById.get(n.parent), container ? [declared, 'end'] : [declared])
-    styles.push(`  style ${restored.get(n.id)} fill:${container ? AREA : FILL.removed},${REMOVED}`)
+    styles.push(`  style ${restored.get(n.id)} fill:${container ? AREA : FILL.removed},${look('removed')}`)
   }
 
   const baseLinks = baseStatements.filter(linkEnds)
@@ -227,7 +233,7 @@ function combined(h, b, headText, baseText, added, removed, unmatched) {
     }
     const [from, to] = linkEnds(s)
     lines.push(`  ${ends[0]}${s.slice(from.length, s.length - to.length)}${ends[1]}`)
-    styles.push(`  linkStyle ${links++} stroke:${STROKE.removed},stroke-width:3px`)
+    styles.push(`  linkStyle ${links++} ${look('removed')}`)
   }
   return { text: lines.join('\n'), styles, containers }
 }
@@ -269,7 +275,7 @@ for (const id of [...new Set([...Object.keys(base.views), ...Object.keys(head.vi
 if (!sections.length) {
   out.push('No view of the architecture model changed.')
 } else {
-  out.push(`${sections.length} of ${new Set([...Object.keys(base.views), ...Object.keys(head.views)]).size} views changed · 🟩 added · 🟨 changed · 🟥 removed`, '')
+  out.push(`${sections.length} of ${new Set([...Object.keys(base.views), ...Object.keys(head.views)]).size} views changed · ${swatch('added', '🟦')}added · ${swatch('changed', '🟨')}changed, thick border · ${swatch('removed', '🟪')}removed, dashed`, '')
   let size = out.join('\n').length
   for (const [n, [, text]] of sections.entries()) {
     if (size + text.length > LIMIT) {
