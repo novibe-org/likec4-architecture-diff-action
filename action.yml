@@ -15,6 +15,15 @@ inputs:
   github-token:
     description: Token that comments on the pull request
     default: ${{ github.token }}
+  added-color:
+    description: Hex stroke colour of what the pull request added; the fill is it at 20 % alpha
+    default: '#0072B2'
+  changed-color:
+    description: Hex stroke colour of what the pull request changed; the fill is it at 20 % alpha
+    default: '#B07D00'
+  removed-color:
+    description: Hex stroke colour of what the pull request removed; the fill is it at 20 % alpha
+    default: '#CC79A7'
 
 runs:
   using: composite
@@ -26,6 +35,9 @@ runs:
         LIKEC4_VERSION: ${{ inputs.likec4-version }}
         BASE: ${{ github.event.pull_request.base.sha }}
         HEAD: ${{ github.sha }}
+        ADDED_COLOR: ${{ inputs.added-color }}
+        CHANGED_COLOR: ${{ inputs.changed-color }}
+        REMOVED_COLOR: ${{ inputs.removed-color }}
       run: |
         set -euo pipefail
         out=$RUNNER_TEMP/architecture-diff
