@@ -12,7 +12,6 @@ const STROKE = Object.fromEntries(Object.entries(DEFAULT).map(([state, colour]) 
   return [state, given]
 }))
 const FILL = Object.fromEntries(Object.entries(STROKE).map(([state, colour]) => [state, `${colour}33`]))
-// A cue that is not colour, so the diff reads in greyscale too.
 const LINE = { added: 'stroke-width:3px', changed: 'stroke-width:4px', removed: 'stroke-width:3px,stroke-dasharray:6 4' }
 const look = state => `stroke:${STROKE[state]},${LINE[state]}`
 const AREA = '#8c959f1f'
@@ -127,7 +126,6 @@ function styled(view, text, { nodes, edges }, unmatched, extra = new Set()) {
   return lines
 }
 
-// A swatch only for a default colour, as an emoji cannot show one given as an input.
 const swatch = (state, emoji) => (STROKE[state] === DEFAULT[state] ? `${emoji} ` : '')
 const fence = lines => lines.join('\n').replaceAll('```', "'''")
 
