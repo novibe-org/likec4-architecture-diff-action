@@ -4,7 +4,6 @@ import { existsSync, readdirSync, readFileSync } from 'node:fs'
 
 const MARKER = '<!-- architecture-diff -->'
 const LIMIT = 60000
-// Okabe-Ito, which colour-blind readers tell apart; each keeps 3:1 on GitHub's light and dark, as Mermaid there cannot pick colours by theme.
 const DEFAULT = { added: '#0072B2', changed: '#B07D00', removed: '#CC79A7' }
 const STROKE = Object.fromEntries(Object.entries(DEFAULT).map(([state, colour]) => {
   const given = process.env[`${state.toUpperCase()}_COLOR`] || colour
